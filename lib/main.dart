@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:myportofolio_mobile/navigation/app_routes.dart';
 import 'package:myportofolio_mobile/menu.dart';
+import 'package:myportofolio_mobile/screens/education_form_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,6 +31,15 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const MyHomePage(),
+      onGenerateRoute: (settings) {
+        if (settings.name == AppRoutes.educationForm) {
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (context) => const EducationFormPage(),
+          );
+        }
+        return null;
+      },
     );
   }
 }
