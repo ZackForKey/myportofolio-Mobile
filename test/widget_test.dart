@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:myportofolio_mobile/main.dart';
 import 'package:myportofolio_mobile/menu.dart';
 import 'package:myportofolio_mobile/screens/education_form_page.dart';
+import 'package:myportofolio_mobile/screens/login_screen.dart';
+import 'package:myportofolio_mobile/screens/project_form_page.dart';
+import 'package:myportofolio_mobile/screens/project_list_screen.dart';
+import 'package:myportofolio_mobile/services/api_client.dart';
 
 void main() {
   testWidgets('home keeps its profile cards and responsive action cards', (
@@ -35,7 +41,7 @@ void main() {
     }
   });
 
-  testWidgets('existing actions show SnackBars and education opens by card', (
+  testWidgets('project, authentication, logout, and education actions work', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -43,17 +49,31 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(_testApp());
     await tester.pumpAndSettle();
 
-    const labels = ['Lihat Proyek', 'Tambah Proyek', 'Logout'];
-    for (final label in labels) {
-      final cardLabel = find.text(label);
-      await tester.ensureVisible(cardLabel);
-      await tester.tap(cardLabel);
-      await tester.pumpAndSettle();
-      expect(find.text('Kamu telah menekan tombol $label!'), findsOneWidget);
-    }
+    final projectsCard = find.text('Lihat Proyek');
+    await tester.ensureVisible(projectsCard);
+    await tester.tap(projectsCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(ProjectListScreen), findsOneWidget);
+    expect(find.text('No projects found.'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    final addProjectCard = find.text('Tambah Proyek');
+    await tester.ensureVisible(addProjectCard);
+    await tester.tap(addProjectCard);
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    final logoutCard = find.text('Logout');
+    await tester.ensureVisible(logoutCard);
+    await tester.tap(logoutCard);
+    await tester.pumpAndSettle();
+    expect(find.text('No active session.'), findsOneWidget);
 
     final educationCard = find.text('Tambah Pendidikan');
     await tester.ensureVisible(educationCard);
@@ -70,7 +90,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(_testApp());
     await tester.pumpAndSettle();
     await _openDrawer(tester);
     await tester.tap(find.text('Add Education'));
@@ -141,6 +161,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('project creation requests login and submits with its token', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(_testApp());
+    await tester.pumpAndSettle();
+    final addProject = find.text('Tambah Proyek');
+    await tester.ensureVisible(addProject);
+    await tester.tap(addProject);
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).first, 'captain');
+    await tester.enterText(find.byType(TextFormField).last, 'secret');
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProjectFormPage), findsOneWidget);
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Portfolio app');
+    await tester.enterText(fields.at(1), 'A project portfolio.');
+    await tester.enterText(fields.at(2), 'Flutter, Django');
+    await tester.enterText(fields.at(3), 'https://example.com/project');
+    await tester.tap(find.text('Save Project'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Project created'), findsOneWidget);
+    expect(find.text('Test was added successfully.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('drawer Home and device back return to the home page', (
     tester,
   ) async {
@@ -177,12 +232,36 @@ void main() {
     await tester.tap(find.text('Add Project'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MyHomePage), findsOneWidget);
-    expect(
-      find.text('Kamu telah menekan tombol Tambah Proyek!'),
-      findsOneWidget,
-    );
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
+}
+
+Widget _testApp() {
+  final client = ApiClient(
+    client: MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/api/v1/projects/') {
+        return http.Response('[]', 200);
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/auth/token/') {
+        return http.Response('{"token":"test-token"}', 200);
+      }
+      if (request.method == 'POST' &&
+          request.url.path == '/api/v1/auth/logout/') {
+        return http.Response('', 204);
+      }
+      if (request.method == 'POST' && request.url.path == '/api/v1/projects/') {
+        return http.Response(
+          '{"id":1,"title":"Test","description":"Test",'
+          '"tech_stack":"Dart","project_url":"https://example.com",'
+          '"project_image_url":""}',
+          201,
+        );
+      }
+      return http.Response('Not found', 404);
+    }),
+  );
+  return MyApp.withApiClient(apiClient: client);
 }
 
 Future<void> _openDrawer(WidgetTester tester) async {

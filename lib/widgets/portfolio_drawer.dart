@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:myportofolio_mobile/navigation/app_routes.dart';
 import 'package:myportofolio_mobile/palette.dart';
+import 'package:myportofolio_mobile/screens/login_screen.dart';
+import 'package:myportofolio_mobile/services/auth_state.dart';
+import 'package:myportofolio_mobile/widgets/auth_guard.dart';
+import 'package:provider/provider.dart';
 
-enum PortfolioPage { home, education }
+enum PortfolioPage { home, education, projects, projectForm }
 
-enum _DrawerDestination { home, addProject, education }
+enum _DrawerDestination { home, addProject, education, authentication }
 
 class PortfolioDrawer extends StatelessWidget {
   final PortfolioPage currentPage;
@@ -13,6 +17,7 @@ class PortfolioDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLoggedIn = context.watch<AuthState>().isLoggedIn;
     return Drawer(
       backgroundColor: PiratePalette.softPaper,
       child: SafeArea(
@@ -78,6 +83,13 @@ class PortfolioDrawer extends StatelessWidget {
               destination: _DrawerDestination.education,
               selected: currentPage == PortfolioPage.education,
             ),
+            _destinationTile(
+              context,
+              label: isLoggedIn ? 'Logout' : 'Login',
+              icon: isLoggedIn ? Icons.logout_rounded : Icons.login_rounded,
+              destination: _DrawerDestination.authentication,
+              selected: false,
+            ),
           ],
         ),
       ),
@@ -104,10 +116,10 @@ class PortfolioDrawer extends StatelessWidget {
     );
   }
 
-  void _handleDestination(
+  Future<void> _handleDestination(
     BuildContext context,
     _DrawerDestination destination,
-  ) {
+  ) async {
     final navigator = Navigator.of(context);
 
     switch (destination) {
@@ -115,22 +127,29 @@ class PortfolioDrawer extends StatelessWidget {
         navigator.popUntil((route) => route.isFirst);
         return;
       case _DrawerDestination.addProject:
-        final messenger = ScaffoldMessenger.of(context);
-        navigator.popUntil((route) => route.isFirst);
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Kamu telah menekan tombol Tambah Proyek!'),
-              backgroundColor: PiratePalette.deepNavy,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        final authorized = await ensureLoggedIn(context);
+        if (!context.mounted) return;
+        navigator.pop();
+        if (authorized) navigator.pushNamed(AppRoutes.projectForm);
         return;
       case _DrawerDestination.education:
         navigator.pop();
         if (currentPage != PortfolioPage.education) {
           navigator.pushNamed(AppRoutes.educationForm);
+        }
+        return;
+      case _DrawerDestination.authentication:
+        final authState = context.read<AuthState>();
+        navigator.pop();
+        if (authState.isLoggedIn) {
+          await authState.logout();
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Logged out.')));
+        } else {
+          await navigator.push<bool>(
+            MaterialPageRoute<bool>(builder: (_) => const LoginScreen()),
+          );
         }
         return;
     }

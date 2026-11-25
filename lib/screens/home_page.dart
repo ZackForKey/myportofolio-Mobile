@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:myportofolio_mobile/palette.dart';
+import 'package:myportofolio_mobile/navigation/app_routes.dart';
 import 'package:myportofolio_mobile/screens/education_form_page.dart';
+import 'package:myportofolio_mobile/screens/project_list_screen.dart';
+import 'package:myportofolio_mobile/services/auth_state.dart';
+import 'package:myportofolio_mobile/widgets/auth_guard.dart';
 import 'package:myportofolio_mobile/widgets/info_card.dart';
 import 'package:myportofolio_mobile/widgets/portfolio_drawer.dart';
 import 'package:myportofolio_mobile/widgets/portfolio_item_card.dart';
+import 'package:provider/provider.dart';
 
 class MyHomePage extends StatelessWidget {
   const MyHomePage({super.key});
@@ -166,20 +171,10 @@ class MyHomePage extends StatelessWidget {
                               ),
                           itemBuilder: (context, index) {
                             final item = _items[index];
-                            if (index == _items.length - 1) {
-                              return ItemCard(
-                                item,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (context) =>
-                                          const EducationFormPage(),
-                                    ),
-                                  );
-                                },
-                              );
-                            }
-                            return ItemCard(item);
+                            return ItemCard(
+                              item,
+                              onTap: () => _handleMission(context, index),
+                            );
                           },
                         ),
                         const SizedBox(height: 20),
@@ -203,6 +198,45 @@ class MyHomePage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _handleMission(BuildContext context, int index) async {
+    switch (index) {
+      case 0:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (context) => const ProjectListScreen(),
+          ),
+        );
+        return;
+      case 1:
+        if (await ensureLoggedIn(context) && context.mounted) {
+          await Navigator.of(context).pushNamed(AppRoutes.projectForm);
+        }
+        return;
+      case 2:
+        final authState = context.read<AuthState>();
+        final wasLoggedIn = authState.isLoggedIn;
+        if (wasLoggedIn) {
+          await authState.logout();
+        }
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(wasLoggedIn ? 'Logged out.' : 'No active session.'),
+            backgroundColor: PiratePalette.deepNavy,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      case 3:
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (context) => const EducationFormPage(),
+          ),
+        );
+        return;
+    }
   }
 }
 
